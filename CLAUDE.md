@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A self-contained Home Assistant OS (HAOS) local add-on that replaces a NixOS-based pipeline. Deployed to `/addons/pv_sync/` on the HAOS machine at `192.168.176.3`.
+A self-contained Home Assistant OS (HAOS) local add-on that replaces a NixOS-based pipeline. Deployed to `/addons/pv_sync/` on the HAOS machine at `192.168.1.3`.
 
 ## Runtime
 
@@ -21,7 +21,7 @@ init_ssh → init_db → while true:
 
 ## Key Facts
 
-- PV device (`192.168.176.17`): lge-ems, BusyBox, no auth required on SSH — key generation loop in `init_ssh()` passes immediately
+- PV device (`192.168.1.17`): lge-ems, BusyBox, no auth required on SSH — key generation loop in `init_ssh()` passes immediately
 - MariaDB: `core-mariadb:3306`, requires `require_secure_transport: false` in MariaDB add-on config and `mariadb --ssl=FALSE` client flag
 - Options file: `/data/options.json` (injected by Supervisor)
 - SSH key persisted at `/data/ssh/id_rsa` (add-on `/data` volume)
@@ -49,7 +49,7 @@ init_ssh → init_db → while true:
 
 | Option | Default | Schema | Description |
 |--------|---------|--------|-------------|
-| `pv_host` | `192.168.176.17` | str | IP/hostname of PV system |
+| `pv_host` | `192.168.1.17` | str | IP/hostname of PV system |
 | `pv_user` | `root` | str | SSH user on PV system |
 | `interval` | `15` | int(1,60) | Sync interval in minutes |
 | `db_user` | `pvsync` | str | MariaDB username |

@@ -11,7 +11,7 @@
   "hassio_api": true,
   "map": ["data:rw"],
   "options": {
-    "pv_host": "192.168.176.17",
+    "pv_host": "192.168.1.17",
     "pv_user": "root",
     "interval": 15,
     "db_user": "pvsync",
