@@ -1,11 +1,11 @@
 # PV Sync Add-on for Home Assistant
 
-This add-on fetches energy data from a local PV system (LG ESS from about 2016) via SSH and publishes 15 sensors directly to Home Assistant. The data is aquired by the sqlite database of the PV-System. No Password is used - there is no security on that device.
+This add-on fetches energy data from a local PV system via SSH and publishes 15 sensors directly to Home Assistant without requiring MQTT, Node-RED, or external automation.
 
 ## What It Does
 
 The add-on:
-1. Connects to a remote PV system over SSH using key-based authentication (not required - empty password)
+1. Connects to a remote PV system over SSH using key-based authentication
 2. Extracts SQLite WAL files (`ems_DEU.db`) from the PV system
 3. Parses time-series data and stores it in MariaDB (via the Home Assistant MariaDB add-on)
 4. Publishes 15 sensors to Home Assistant using the Supervisor REST API
@@ -14,7 +14,7 @@ The add-on:
 ## Prerequisites
 
 - Home Assistant OS with the official **MariaDB add-on** (`core-mariadb`) installed and running
-- MariaDB add-on configured with `local_infile = 1`. Add this to the MariaDB add-on configuration: (default-setting)
+- MariaDB add-on configured with `local_infile = 1`. Add this to the MariaDB add-on configuration:
   ```
   [mysqld]
   local_infile = 1
@@ -36,7 +36,7 @@ The add-on:
    - `sync_interval_minutes`: How often to sync (default: 15)
    - `db_user`: MariaDB username
    - `db_password`: MariaDB password
-   - `db_name`: Database name (default: `dbfiles2`)
+   - `db_name`: Database name (default: `dbfiles`)
 
 4. Start the add-on from the UI
 

@@ -1,10 +1,10 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+FROM alpine:3.21
 
 RUN apk add --no-cache \
     sqlite \
     mariadb-client \
     openssh-client \
+    sshpass \
     jq \
     curl \
     bash

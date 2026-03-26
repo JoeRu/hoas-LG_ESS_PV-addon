@@ -1,12 +1,14 @@
-#!/usr/bin/with-contenv bashio
+#!/usr/bin/env bash
+set -euo pipefail
 
 # ── Config ────────────────────────────────────────────────────────────────────
-PV_HOST=$(bashio::config 'pv_host')
-PV_USER=$(bashio::config 'pv_user')
-INTERVAL=$(bashio::config 'interval')
-DB_USER=$(bashio::config 'db_user')
-DB_PASS=$(bashio::config 'db_password')
-DB_NAME=$(bashio::config 'db_name')
+OPTIONS=/data/options.json
+PV_HOST=$(jq -r '.pv_host' "$OPTIONS")
+PV_USER=$(jq -r '.pv_user' "$OPTIONS")
+INTERVAL=$(jq -r '.interval' "$OPTIONS")
+DB_USER=$(jq -r '.db_user' "$OPTIONS")
+DB_PASS=$(jq -r '.db_password' "$OPTIONS")
+DB_NAME=$(jq -r '.db_name' "$OPTIONS")
 
 readonly DB_HOST="core-mariadb"
 readonly DB_PORT="3306"
@@ -15,9 +17,12 @@ readonly SSH_KEY="/data/ssh/id_rsa"
 readonly PV_DB="/nvdata/DBFiles/ems_DEU.db"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+log_info() { echo "$(date '+%Y-%m-%d %H:%M:%S') INFO: $*"; }
+
 mysql_cmd() {
-    mysql --local-infile -h "${DB_HOST}" -P "${DB_PORT}" \
-          -u "${DB_USER}" -p"${DB_PASS}" "$@"
+    mariadb --local-infile --ssl=FALSE \
+            -h "${DB_HOST}" -P "${DB_PORT}" \
+            -u "${DB_USER}" -p"${DB_PASS}" "$@"
 }
 
 ssh_cmd() {
@@ -43,24 +48,24 @@ init_ssh() {
         mkdir -p /data/ssh
         chmod 700 /data/ssh
         ssh-keygen -t rsa -b 4096 -f "${SSH_KEY}" -N "" -q
-        bashio::log.info "═══════════════════════════════════════════"
-        bashio::log.info "SSH key generated. Add this public key to"
-        bashio::log.info "${PV_USER}@${PV_HOST}:/root/.ssh/authorized_keys:"
-        bashio::log.info "$(cat "${SSH_KEY}.pub")"
-        bashio::log.info "═══════════════════════════════════════════"
+        log_info "═══════════════════════════════════════════"
+        log_info "SSH key generated. Add this public key to"
+        log_info "${PV_USER}@${PV_HOST}:/root/.ssh/authorized_keys:"
+        log_info "$(cat "${SSH_KEY}.pub")"
+        log_info "═══════════════════════════════════════════"
     fi
 
-    bashio::log.info "Testing SSH connection to ${PV_HOST}..."
+    log_info "Testing SSH connection to ${PV_HOST}..."
     while ! ssh_cmd true 2>/dev/null; do
-        bashio::log.info "Waiting for SSH key to be authorized on PV system (retrying in 30s)..."
+        log_info "Waiting for SSH key to be authorized on PV system (retrying in 30s)..."
         sleep 30
     done
-    bashio::log.info "SSH authorized — starting sync loop"
+    log_info "SSH authorized — starting sync loop"
 }
 
 # ── DB Init ───────────────────────────────────────────────────────────────────
 init_db() {
-    bashio::log.info "Initializing databases..."
+    log_info "Initializing databases..."
 
     mysql_cmd -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;"
     mysql_cmd -e "CREATE DATABASE IF NOT EXISTS \`${DB_STAGING}\`;"
@@ -243,21 +248,21 @@ CREATE TABLE IF NOT EXISTS x_my_tbl_record_week (
 );
 EOF
 
-    bashio::log.info "DB initialization complete"
+    log_info "DB initialization complete"
 }
 
 # ── Phase 1: Fetch ────────────────────────────────────────────────────────────
 fetch() {
-    bashio::log.info "Fetching SQLite DB from ${PV_HOST}..."
+    log_info "Fetching SQLite DB from ${PV_HOST}..."
     ssh_cmd "cat ${PV_DB}"        > /tmp/ems.db     || return 1
     ssh_cmd "cat ${PV_DB}-wal"    > /tmp/ems.db-wal 2>/dev/null || true
     ssh_cmd "cat ${PV_DB}-shm"    > /tmp/ems.db-shm 2>/dev/null || true
-    bashio::log.info "Fetch complete ($(du -sh /tmp/ems.db | cut -f1))"
+    log_info "Fetch complete ($(du -sh /tmp/ems.db | cut -f1))"
 }
 
 # ── Phase 2: Extract ──────────────────────────────────────────────────────────
 extract() {
-    bashio::log.info "Extracting CSV from SQLite..."
+    log_info "Extracting CSV from SQLite..."
 
     sqlite3 -header -csv /tmp/ems.db "
 SELECT time_utc,
@@ -315,12 +320,12 @@ SELECT time_utc,
 FROM tbl_record_month;
 " > /tmp/month.csv
 
-    bashio::log.info "Extract complete: quarter=$(wc -l < /tmp/quarter.csv) day=$(wc -l < /tmp/day.csv) week=$(wc -l < /tmp/week.csv) month=$(wc -l < /tmp/month.csv) rows (incl. header)"
+    log_info "Extract complete: quarter=$(wc -l < /tmp/quarter.csv) day=$(wc -l < /tmp/day.csv) week=$(wc -l < /tmp/week.csv) month=$(wc -l < /tmp/month.csv) rows (incl. header)"
 }
 
 # ── Phase 3: Load ─────────────────────────────────────────────────────────────
 load_staging() {
-    bashio::log.info "Loading CSV into staging tables..."
+    log_info "Loading CSV into staging tables..."
 
     mysql_cmd "${DB_STAGING}" <<EOF
 TRUNCATE TABLE x_my_tbl_record_quarter;
@@ -352,12 +357,12 @@ LINES TERMINATED BY '\n'
 IGNORE 1 ROWS;
 EOF
 
-    bashio::log.info "Staging load complete"
+    log_info "Staging load complete"
 }
 
 # ── Phase 4: Merge ────────────────────────────────────────────────────────────
 merge() {
-    bashio::log.info "Merging staging into production (5-day window)..."
+    log_info "Merging staging into production (5-day window)..."
 
     mysql_cmd "${DB_NAME}" <<EOF
 SET @date_start = UNIX_TIMESTAMP(CURDATE() - INTERVAL 5 DAY);
@@ -397,12 +402,12 @@ INSERT INTO my_tbl_record_quarter
   );
 EOF
 
-    bashio::log.info "Merge complete"
+    log_info "Merge complete"
 }
 
 # ── Task 9: publish_counters ───────────────────────────────────────────────────
 publish_counters() {
-    bashio::log.info "Publishing counter sensors..."
+    log_info "Publishing counter sensors..."
 
     local val payload
 
@@ -422,12 +427,12 @@ publish_counters() {
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "kWh", device_class: "energy", state_class: "total_increasing", friendly_name: "Batterie Entladen Zähler"}}')
     ha_sensor "sensor.batt_discharge_zaehler" "$payload"
 
-    bashio::log.info "Counter sensors published"
+    log_info "Counter sensors published"
 }
 
 # ── Task 10: publish_latest ────────────────────────────────────────────────────
 publish_latest() {
-    bashio::log.info "Publishing latest value sensors..."
+    log_info "Publishing latest value sensors..."
 
     local val payload
 
@@ -463,12 +468,12 @@ publish_latest() {
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "W", device_class: "power", state_class: "measurement", friendly_name: "Verbrauch"}}')
     ha_sensor "sensor.load_power" "$payload"
 
-    bashio::log.info "Latest value sensors published"
+    log_info "Latest value sensors published"
 }
 
 # ── Task 11: publish_1h ────────────────────────────────────────────────────────
 publish_1h() {
-    bashio::log.info "Publishing 1h history sensors..."
+    log_info "Publishing 1h history sensors..."
 
     local rows json_array row_count payload
 
@@ -508,7 +513,7 @@ publish_1h() {
     payload=$(jq -n --argjson data "$json_array" --arg state "$row_count" '{"state": $state, "attributes": {"data": $data, "unit_of_measurement": "rows", "friendly_name": "Verbrauch 1H"}}')
     ha_sensor "sensor.consumption_1h" "$payload"
 
-    bashio::log.info "1h history sensors published"
+    log_info "1h history sensors published"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -516,7 +521,7 @@ init_ssh
 init_db
 
 while true; do
-    bashio::log.info "Starting sync cycle..."
+    log_info "Starting sync cycle..."
     if fetch; then
         extract \
         && load_staging \
@@ -524,10 +529,10 @@ while true; do
         && publish_counters \
         && publish_latest \
         && publish_1h \
-        && bashio::log.info "Sync cycle complete"
+        && log_info "Sync cycle complete"
     else
-        bashio::log.info "Fetch failed — skipping cycle"
+        log_info "Fetch failed — skipping cycle"
     fi
-    bashio::log.info "Sleeping ${INTERVAL} minutes..."
+    log_info "Sleeping ${INTERVAL} minutes..."
     sleep $((INTERVAL * 60))
 done
