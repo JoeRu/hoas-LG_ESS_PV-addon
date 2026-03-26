@@ -27,6 +27,8 @@ init_ssh → init_db → while true:
 - SSH key persisted at `/data/ssh/id_rsa` (add-on `/data` volume)
 - CSV files written to `/tmp/` inside container
 - HA sensors published via `curl` to `http://supervisor/core/api/states/sensor.<name>` with `SUPERVISOR_TOKEN`
+- **Energy unit**: The LG ESS DB stores all `_energy` columns in **Wh** (not kWh). `publish_counters()` divides by `ENERGY_DIVISOR` (1000 when `energy_unit=Wh`, 1 when `kWh`) before publishing. Without this the values show as ~1000× too large (e.g. 20 GWh instead of 20 MWh).
+- **Updating addon options**: Use the Supervisor REST API from within a privileged addon container (e.g. SSH addon): `curl -X POST -H "Authorization: Bearer $SUPERVISOR_TOKEN" -H "Content-Type: application/json" -d '{"options":{...}}' http://supervisor/addons/local_pv_sync/options`
 
 ## Files
 
@@ -41,7 +43,20 @@ init_ssh → init_db → while true:
 
 - 4 counter sensors (`total_increasing`, kWh): `sensor.pv_zaehler`, `sensor.pv_direct_zaehler`, `sensor.batt_charge_zaehler`, `sensor.batt_discharge_zaehler`
 - 8 instantaneous sensors (W / %): `sensor.pv_power`, `sensor.pv_direct_consumption`, `sensor.batt_charge`, `sensor.batt_discharge`, `sensor.batt_soc`, `sensor.grid_power_purchase`, `sensor.grid_feed_in`, `sensor.load_power`
-- 3 time-series sensors (1H array in `attributes.data`): `sensor.pv_1h`, `sensor.battery_1h`, `sensor.consumption_1h`
+- 3 time-series sensors (configurable window via `history_hours`, array in `attributes.data`): `sensor.pv_1h`, `sensor.battery_1h`, `sensor.consumption_1h`
+
+## Config Options
+
+| Option | Default | Schema | Description |
+|--------|---------|--------|-------------|
+| `pv_host` | `192.168.176.17` | str | IP/hostname of PV system |
+| `pv_user` | `root` | str | SSH user on PV system |
+| `interval` | `15` | int(1,60) | Sync interval in minutes |
+| `db_user` | `pvsync` | str | MariaDB username |
+| `db_password` | `` | password | MariaDB password |
+| `db_name` | `dbfiles` | str | Production database name (`dbfiles2` staging always hardcoded) |
+| `energy_unit` | `Wh` | list(Wh\|kWh) | Unit stored in DB — controls ÷1000 factor for counter sensors |
+| `history_hours` | `1` | int(1,24) | Hours of data in time-series sensors |
 
 ## GitHub Repo
 

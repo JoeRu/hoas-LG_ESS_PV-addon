@@ -9,6 +9,15 @@ INTERVAL=$(jq -r '.interval' "$OPTIONS")
 DB_USER=$(jq -r '.db_user' "$OPTIONS")
 DB_PASS=$(jq -r '.db_password' "$OPTIONS")
 DB_NAME=$(jq -r '.db_name' "$OPTIONS")
+ENERGY_UNIT=$(jq -r '.energy_unit // "Wh"' "$OPTIONS")
+HISTORY_HOURS=$(jq -r '.history_hours // 1' "$OPTIONS")
+
+# Energy values in the DB are stored in Wh — divide by 1000 to get kWh
+if [[ "$ENERGY_UNIT" == "Wh" ]]; then
+    ENERGY_DIVISOR=1000
+else
+    ENERGY_DIVISOR=1
+fi
 
 readonly DB_HOST="core-mariadb"
 readonly DB_PORT="3306"
@@ -411,19 +420,19 @@ publish_counters() {
 
     local val payload
 
-    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(SUM(pv_power_energy),0) FROM my_tbl_record_quarter")
+    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT ROUND(COALESCE(SUM(pv_power_energy),0) / ${ENERGY_DIVISOR}, 3) FROM my_tbl_record_quarter")
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "kWh", device_class: "energy", state_class: "total_increasing", friendly_name: "PV Zähler"}}')
     ha_sensor "sensor.pv_zaehler" "$payload"
 
-    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(SUM(pv_direct_consumption_energy),0) FROM my_tbl_record_quarter")
+    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT ROUND(COALESCE(SUM(pv_direct_consumption_energy),0) / ${ENERGY_DIVISOR}, 3) FROM my_tbl_record_quarter")
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "kWh", device_class: "energy", state_class: "total_increasing", friendly_name: "PV Direktverbrauch Zähler"}}')
     ha_sensor "sensor.pv_direct_zaehler" "$payload"
 
-    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(SUM(batt_charge_energy),0) FROM my_tbl_record_quarter")
+    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT ROUND(COALESCE(SUM(batt_charge_energy),0) / ${ENERGY_DIVISOR}, 3) FROM my_tbl_record_quarter")
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "kWh", device_class: "energy", state_class: "total_increasing", friendly_name: "Batterie Laden Zähler"}}')
     ha_sensor "sensor.batt_charge_zaehler" "$payload"
 
-    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(SUM(batt_discharge_energy),0) FROM my_tbl_record_quarter")
+    val=$(mysql_cmd "$DB_NAME" -sN -e "SELECT ROUND(COALESCE(SUM(batt_discharge_energy),0) / ${ENERGY_DIVISOR}, 3) FROM my_tbl_record_quarter")
     payload=$(jq -n --arg state "$val" '{state: $state, attributes: {unit_of_measurement: "kWh", device_class: "energy", state_class: "total_increasing", friendly_name: "Batterie Entladen Zähler"}}')
     ha_sensor "sensor.batt_discharge_zaehler" "$payload"
 
@@ -478,7 +487,7 @@ publish_1h() {
     local rows json_array row_count payload
 
     # sensor.pv_1h
-    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(pv_power_energy,0), COALESCE(pv_direct_consumption_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 1 HOUR) ORDER BY time_utc ASC")
+    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(pv_power_energy,0), COALESCE(pv_direct_consumption_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL ${HISTORY_HOURS} HOUR) ORDER BY time_utc ASC")
     if [[ -z "$rows" ]]; then
         json_array='[]'
         row_count=0
@@ -490,7 +499,7 @@ publish_1h() {
     ha_sensor "sensor.pv_1h" "$payload"
 
     # sensor.battery_1h
-    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(batt_charge_energy,0), COALESCE(batt_discharge_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 1 HOUR) ORDER BY time_utc ASC")
+    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(batt_charge_energy,0), COALESCE(batt_discharge_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL ${HISTORY_HOURS} HOUR) ORDER BY time_utc ASC")
     if [[ -z "$rows" ]]; then
         json_array='[]'
         row_count=0
@@ -502,7 +511,7 @@ publish_1h() {
     ha_sensor "sensor.battery_1h" "$payload"
 
     # sensor.consumption_1h
-    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(pv_direct_consumption_energy,0), COALESCE(load_power_energy,0), COALESCE(batt_discharge_energy,0), COALESCE(grid_power_purchase_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 1 HOUR) ORDER BY time_utc ASC")
+    rows=$(mysql_cmd "$DB_NAME" -sN -e "SELECT COALESCE(time_utc,0), COALESCE(pv_direct_consumption_energy,0), COALESCE(load_power_energy,0), COALESCE(batt_discharge_energy,0), COALESCE(grid_power_purchase_energy,0) FROM my_tbl_record_quarter WHERE time_utc > UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL ${HISTORY_HOURS} HOUR) ORDER BY time_utc ASC")
     if [[ -z "$rows" ]]; then
         json_array='[]'
         row_count=0

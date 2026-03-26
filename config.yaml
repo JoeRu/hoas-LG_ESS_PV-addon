@@ -1,5 +1,5 @@
 name: PV Sync
-version: "1.0.0"
+version: "1.1.0"
 slug: pv_sync
 description: Syncs PV system data to MariaDB and publishes sensors directly to Home Assistant
 arch:
@@ -19,6 +19,8 @@ options:
   db_user: "pvsync"
   db_password: ""
   db_name: "dbfiles"
+  energy_unit: "Wh"
+  history_hours: 1
 schema:
   pv_host: str
   pv_user: str
@@ -26,3 +28,5 @@ schema:
   db_user: str
   db_password: password
   db_name: str
+  energy_unit: "list(Wh|kWh)"
+  history_hours: "int(1,24)"

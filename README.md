@@ -33,10 +33,12 @@ The add-on:
 3. Configure the add-on options:
    - `pv_host`: IP address or hostname of the PV system
    - `pv_user`: SSH username (typically `root`)
-   - `sync_interval_minutes`: How often to sync (default: 15)
+   - `interval`: How often to sync in minutes (default: 15)
    - `db_user`: MariaDB username
    - `db_password`: MariaDB password
    - `db_name`: Database name (default: `dbfiles`)
+   - `energy_unit`: Unit used by the PV database — `Wh` or `kWh` (default: `Wh`). The LG ESS stores energy in Wh per 15-min interval; this option divides by 1000 before publishing sensors so they show correct kWh values.
+   - `history_hours`: How many hours of data to include in the time-series sensors (default: `1`, max: `24`)
 
 4. Start the add-on from the UI
 
@@ -65,10 +67,10 @@ On first start, the add-on generates an RSA key pair in `/data/ssh/`:
 - `sensor.grid_feed_in` — Grid export (W)
 - `sensor.load_power` — Load consumption (W)
 
-**Time-Series Sensors (1 hour data in attributes):**
-- `sensor.pv_1h` — 1-hour PV power history
-- `sensor.battery_1h` — 1-hour battery history
-- `sensor.consumption_1h` — 1-hour consumption history
+**Time-Series Sensors (configurable window, data in attributes):**
+- `sensor.pv_1h` — PV power history (`history_hours` window)
+- `sensor.battery_1h` — Battery history (`history_hours` window)
+- `sensor.consumption_1h` — Consumption history (`history_hours` window)
 
 ## Troubleshooting
 
